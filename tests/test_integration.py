@@ -116,3 +116,44 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('tidak valid',await self.send(text))
         for table in ('body_weight_logs','food_logs','workout_sessions','workout_sets'):
             self.assertEqual(await self.conn.fetchval(f'select count(*) from fitness.{table}'),0)
+
+    async def test_concurrent_duplicate_and_workout_rollback(self):
+        import asyncpg
+        import asyncio
+        other=await asyncpg.connect(DSN)
+        try:
+            replies=await asyncio.gather(
+                process(self.conn,990,123,123,'/weight 78',self.now),
+                process(other,990,123,123,'/weight 78',self.now))
+            self.assertEqual(sum(r is None for r in replies),1)
+            self.assertEqual(await self.conn.fetchval('select count(*) from fitness.body_weight_logs'),1)
+        finally:
+            await other.close()
+        await self.conn.execute("create function fitness.fail_set() returns trigger language plpgsql as $$ begin raise exception 'injected'; end $$")
+        await self.conn.execute('create trigger fail before insert on fitness.workout_sets for each row execute function fitness.fail_set()')
+        with self.assertRaises(Exception):
+            await self.send('/workout Workout\nBench\nSet 1: 20 kg x 8',update=991)
+        self.assertEqual(await self.conn.fetchval('select count(*) from fitness.workout_sessions'),0)
+        self.assertIsNone(await self.conn.fetchval('select id from fitness.bot_events where telegram_update_id=991'))
+        await self.conn.execute('drop trigger fail on fitness.workout_sets')
+        await self.send('/workout Workout\nBench\nSet 1: 20 kg x 8',update=991)
+        self.assertEqual(await self.conn.fetchval('select count(*) from fitness.workout_sets'),1)
+
+    async def test_weight_draft_and_timezone(self):
+        await self.send('/weight 78')
+        self.assertEqual(float(await self.conn.fetchval('select current_weight_kg from fitness.user_profiles')),78)
+        await self.send('/goal manual 2000 140')
+        await self.send('/weight 79')
+        self.assertEqual(await load_state(self.conn,1),{})
+        await self.send('/confirmgoal')
+        self.assertEqual(await self.conn.fetchval('select count(*) from fitness.nutrition_goals'),0)
+        await self.send('/timezone Asia/Tokyo')
+        self.assertEqual(await self.conn.fetchval('select timezone from fitness.users'),'Asia/Tokyo')
+        await self.send('/reminder on')
+        row=dict(await self.conn.fetchrow("select r.*,u.timezone,u.telegram_user_id,u.telegram_chat_id from fitness.reminder_settings r join fitness.users u on u.id=r.user_id where reminder_type='weekly_coach'"))
+        bot=AsyncMock()
+        # Still 20:00 Jakarta, not 20:00 Tokyo.
+        await notify(self.conn,bot,row,datetime(2026,10,18,11,0,tzinfo=timezone.utc))
+        bot.send_message.assert_not_awaited()
+        await notify(self.conn,bot,row,datetime(2026,10,18,13,0,tzinfo=timezone.utc))
+        bot.send_message.assert_awaited_once()

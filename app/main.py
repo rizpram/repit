@@ -41,6 +41,10 @@ async def run():
     lock=await asyncpg.connect(dsn,ssl=tls,command_timeout=30)
     pool=bot=task=None
     failure=asyncio.get_running_loop().create_future()
+    def lock_lost(connection):
+        if not failure.done():
+            failure.set_result(True)
+    lock.add_termination_listener(lock_lost)
     try:
         if not await lock.fetchval('select pg_try_advisory_lock($1)',LOCK_ID):
             raise RuntimeError('Another REPIT poller owns lock')
@@ -84,7 +88,7 @@ async def run():
                 await asyncio.sleep(30)
 
         task=asyncio.create_task(maintenance())
-        poller=asyncio.create_task(dp.start_polling(bot,handle_as_tasks=False,allowed_updates=['message'],close_bot_session=False,handle_signals=False))
+        poller=asyncio.create_task(dp.start_polling(bot,handle_as_tasks=False,allowed_updates=['message'],close_bot_session=False,handle_signals=True))
         try:
             done,_=await asyncio.wait([task,poller,failure],return_when=asyncio.FIRST_COMPLETED)
             if failure in done:
@@ -92,7 +96,11 @@ async def run():
             for item in done:
                 item.result()
         finally:
-            poller.cancel()
+            # stop_polling cancels its child polling task; cancelling only the
+            # start_polling wrapper could leave a child fetching updates.
+            if not poller.done():
+                with contextlib.suppress(RuntimeError):
+                    await dp.stop_polling()
             with contextlib.suppress(asyncio.CancelledError):
                 await poller
     finally:

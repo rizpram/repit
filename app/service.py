@@ -1,5 +1,6 @@
 """Atomic command processing. Telegram sends occur only after commit."""
 import json
+import hashlib
 from datetime import date, time
 from zoneinfo import ZoneInfo
 from app.domain import STEPS, number, parse_field, parse_meal, parse_workout, week_bounds
@@ -134,6 +135,10 @@ async def command(conn,uid,raw,now,timezone):
         return 'Estimasi makanan dikonfirmasi dan dicatat.'
     if cmd=='/workout':
         workout=parse_workout(arg,timezone,now)
+        # Exact Phase 1.2 legacy fingerprints still deduplicate existing imports.
+        legacy=hashlib.sha256(arg.lower().encode()).hexdigest()
+        if await conn.fetchval('select id from fitness.workout_sessions where user_id=$1 and fingerprint=$2',uid,legacy):
+            return 'Workout duplikat sudah tercatat.'
         sid=await conn.fetchval('''insert into fitness.workout_sessions
             (user_id,title,source,raw_text,fingerprint,workout_at) values($1,$2,'hevy_paste',$3,$4,$5)
             on conflict(user_id,fingerprint) do nothing returning id''',uid,workout['title'],arg,workout['fingerprint'],workout['workout_at'])
