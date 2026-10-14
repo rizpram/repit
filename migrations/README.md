@@ -1,0 +1,1 @@
+Supabase project `lzfrfpokshfrbnbaiuqo` already has applied migrations `fitness_phase1_foundation` and `fitness_body_goal_modes`. Do not apply `001_initial.sql`; it is retained as historical draft only and does not match the live schema. Export a clean schema migration before deploying to any new project.

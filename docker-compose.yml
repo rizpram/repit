@@ -1,0 +1,19 @@
+services:
+  fitness-bot:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    mem_limit: 256m
+    pids_limit: 100
+    healthcheck:
+      test: ["CMD", "python", "-c", "import os; assert os.path.exists('/proc/1/status')"]
+      interval: 60s
+      timeout: 5s
+      retries: 3
