@@ -1,0 +1,45 @@
+name: REPIT CI
+on:
+  pull_request:
+  push:
+    branches: [main, 'codex/**']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ci-only-password
+          POSTGRES_DB: repit_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - run: pip install -r requirements.txt
+      - run: python -m unittest discover -s tests -v
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:ci-only-password@localhost:5432/repit_test
+      - run: python -m compileall -q app tests
+      - run: python scripts/scan_secrets.py
+      - run: docker build -t repit:ci .
+      - name: Image imports and absent secret files
+        run: |
+          docker run --rm --entrypoint python repit:ci -c "import aiogram, asyncpg, app.main; from pathlib import Path; assert not Path('/app/.env').exists()"
+          docker run --rm --entrypoint python repit:ci -c "from app.security import healthy; assert not healthy()"
+      - name: Compose validation using placeholders
+        run: |
+          cp .env.example .env
+          touch supabase-ca.crt
+          docker compose config --quiet
+          rm .env supabase-ca.crt
