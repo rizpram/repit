@@ -19,6 +19,8 @@ def database_options(dsn, ca_file):
         raise ValueError('DATABASE_URL must belong to authorized project')
     if pooler and uri.port!=5432:
         raise ValueError('Use session pooler 5432; transaction pooler cannot hold poller lock')
+    if any(k not in ('application_name',) and not k.lower().startswith('ssl') for k,v in parse_qsl(uri.query)):
+        raise ValueError('Unsupported DATABASE_URL query parameters')
     query=urlencode([(k,v) for k,v in parse_qsl(uri.query) if not k.lower().startswith('ssl')])
     cleaned=urlunsplit((uri.scheme,uri.netloc,uri.path,query,''))
     ctx=ssl.create_default_context(cafile=ca_file or None)

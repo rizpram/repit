@@ -31,7 +31,7 @@ Tables: users, user_profiles, nutrition_goals, body_weight_logs, bot_events, con
 
 Verified uniqueness: telegram_user_id; telegram_update_id; one current nutrition goal per user; workout (user_id,fingerprint); coach (user_id,week_start); reminder (user_id,reminder_type); delivery (user_id,reminder_type,scheduled_for).
 
-Verified goal date check permits effective_to=effective_from. Formula/food/weight validation aligns with inspected constraints. anon/authenticated have no USAGE on fitness. No migrations required.
+Verified goal date check permits effective_to=effective_from. Formula/food/weight validation aligns with inspected constraints. All 12 tables have RLS enabled; anon/authenticated have no USAGE on fitness or SELECT on these tables. No migrations required.
 
 ## Secret audit
 

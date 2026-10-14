@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from app.domain import reminder_due
 from app.security import HEARTBEAT, LOCK_ID, database_options, setup_logging
 from app.service import coach, process
+from app.vision import estimate
 
 async def notify(conn,bot,row,now):
     if row['reminder_type']=='weekly_coach':
@@ -29,10 +30,32 @@ async def notify(conn,bot,row,now):
         logging.error('Notification delivery failed; inspect status')
         await conn.execute("update fitness.notification_deliveries set status='failed' where id=$1",delivery)
 
+async def handle_update(bot,pool,allowed,event,failure):
+    message=event.message
+    if not message or not message.from_user or message.from_user.id!=allowed or message.chat.type!='private':
+        return
+    try:
+        async with pool.acquire() as conn:
+            if await conn.fetchval('select 1 from fitness.bot_events where telegram_update_id=$1',event.update_id):
+                return
+            vision=await estimate(bot,message.photo[-1]) if message.photo else None
+            reply=await process(conn,event.update_id,allowed,message.chat.id,(message.text or '').strip(),datetime.now(timezone.utc),vision)
+    except Exception:
+        # aiogram catches ordinary handler errors. Cancel this polling task
+        # and signal supervisor so no next batch acknowledges failed writes.
+        if not failure.done():
+            failure.set_result(True)
+        raise asyncio.CancelledError()
+    if reply:
+        try:
+            await message.answer(reply)
+        except Exception:
+            logging.error('Reply failed; committed writes will not replay')
+
+
 async def run():
     import asyncpg
     from aiogram import Bot, Dispatcher
-    from app.vision import estimate
     token=os.environ['TELEGRAM_BOT_TOKEN']
     allowed=int(os.environ['TELEGRAM_ALLOWED_USER_ID'])
     if token=='replace_locally' or not token or allowed<=0:
@@ -53,26 +76,7 @@ async def run():
 
         @dp.update.outer_middleware()
         async def durable(handler,event,data):
-            message=event.message
-            if not message or not message.from_user or message.from_user.id!=allowed or message.chat.type!='private':
-                return
-            try:
-                async with pool.acquire() as conn:
-                    if await conn.fetchval('select 1 from fitness.bot_events where telegram_update_id=$1',event.update_id):
-                        return
-                    vision=await estimate(bot,message.photo[-1]) if message.photo else None
-                    reply=await process(conn,event.update_id,allowed,message.chat.id,(message.text or '').strip(),datetime.now(timezone.utc),vision)
-            except Exception:
-                # aiogram catches ordinary handler errors. Cancel this polling task
-                # and signal supervisor so no next batch acknowledges failed writes.
-                if not failure.done():
-                    failure.set_result(True)
-                raise asyncio.CancelledError()
-            if reply:
-                try:
-                    await message.answer(reply)
-                except Exception:
-                    logging.error('Reply failed; committed writes will not replay')
+            return await handle_update(bot,pool,allowed,event,failure)
 
         async def maintenance():
             while True:
