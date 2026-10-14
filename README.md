@@ -27,7 +27,7 @@ Live schema was inspected read-only on 2026-10-14. No schema migration is needed
 
 ## Tests
 
-CI runs pinned Python dependencies, unit/command tests, real PostgreSQL integration tests, secret-history scan, compilation, Docker build/import checks and Compose validation. Tests use localhost PostgreSQL only; no other Supabase project is used or created.
+CI installs requirements.lock, audits dependencies, and runs unit/command tests, real PostgreSQL integration tests, 8 isolated deployment guard/rollback simulations, secret-history scan, compilation, Bash syntax, Docker build/import checks and Compose validation. Tests use localhost PostgreSQL only; no other Supabase project is used or created.
 
 Local pure tests:
     python -m unittest tests.test_goals tests.test_domain tests.test_service -v
@@ -39,6 +39,6 @@ Without TEST_DATABASE_URL integration tests explicitly skip. A skipped integrati
 
 ## Deployment
 
-Read docs/RELEASE.md. Do not deploy until CI passes and review is complete. No auto-deploy workflow exists. Production Telegram and DB verification is a separate authorized step; never run a second poller using the production token for CI.
+Use scripts/deploy.sh with an exact tested SHA in an authorized SSH session. Read docs/RELEASE.md and docs/DEPLOYMENT_STATUS.md for actual rollout status. Do not deploy until CI passes and review is complete. No auto-deploy workflow exists. Production Telegram and DB verification is a separate authorized step; never run a second poller using the production token for CI.
 
 Keep .env private and chmod 600. .gitignore and .dockerignore exclude .env. Repository is public; private visibility is recommended. If any real credential was ever published, rotate it before release even if the file was deleted.

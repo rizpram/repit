@@ -33,4 +33,15 @@ A working authorized SSH session with TCP access to 76.13.21.67:22 and a root or
 Live database TLS, Telegram polling and command replies remain untested because no server session was available. CI/unit/disposable DB success does not establish production readiness of the private server credentials. This report must be updated after a real rollout.
 
 
-Automated validation before adding the version lock: 33 tests, full Docker build, Compose validation, deployment Bash syntax and dependency audit passed in CI run 38573445723. Runtime lock and isolated deployment guard/rollback simulations are being revalidated in the next PR run. These simulations use fake Docker inside a disposable container without the Docker socket; they do not claim a real rollout.
+Automated validation of release code commit 14732ec3a0a449725085d91297191a2710bdccd2 passed:
+- 33 application tests, including 7 real disposable PostgreSQL integration tests
+- 8 isolated deployment guard/rollback tests (41 total tests)
+- Dependency audit: no known vulnerabilities found for the locked runtime requirements
+- Full Docker build, image import/secret-file checks, Compose validation, Bash syntax, compilation and reachable-history heuristic secret scan
+- CI evidence: https://github.com/rizpram/repit/actions/runs/38574143873
+
+Guard simulations use fake Docker inside a disposable container without the Docker socket. They test refusal/rollback behavior and do not claim a real rollout. Production remains NOT DEPLOYED and NOT VERIFIED LIVE.
+
+Run the prepared script with the exact tested release commit:
+    sudo bash scripts/deploy.sh 14732ec3a0a449725085d91297191a2710bdccd2
+
