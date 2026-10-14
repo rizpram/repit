@@ -31,3 +31,6 @@ Prerequisites placed privately on the server:
 A working authorized SSH session with TCP access to 76.13.21.67:22 and a root or sudo-capable identity is required. Do not change firewall automatically. Existing host fingerprint must be verified when establishing SSH. Credentials stay outside Git and chat.
 
 Live database TLS, Telegram polling and command replies remain untested because no server session was available. CI/unit/disposable DB success does not establish production readiness of the private server credentials. This report must be updated after a real rollout.
+
+
+Automated validation before adding the version lock: 33 tests, full Docker build, Compose validation, deployment Bash syntax and dependency audit passed in CI run 38573445723. Runtime lock and isolated deployment guard/rollback simulations are being revalidated in the next PR run. These simulations use fake Docker inside a disposable container without the Docker socket; they do not claim a real rollout.

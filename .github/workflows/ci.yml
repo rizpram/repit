@@ -26,12 +26,12 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements.lock
       - name: Audit resolved runtime dependencies
         run: |
           python -m venv /tmp/repit-audit
           /tmp/repit-audit/bin/pip install pip-audit==2.10.1
-          /tmp/repit-audit/bin/pip-audit -r requirements.txt
+          /tmp/repit-audit/bin/pip-audit -r requirements.lock
       - name: Record resolved runtime versions
         run: pip freeze
       - name: Deployment script syntax
@@ -42,6 +42,8 @@ jobs:
       - run: python -m compileall -q app tests
       - run: python scripts/scan_secrets.py
       - run: docker build -t repit:ci .
+      - name: Deployment guard and rollback simulation (isolated, no Docker socket)
+        run: docker run --rm --user 0:0 -v "$PWD:/workspace:ro" -w /workspace --entrypoint python repit:ci scripts/test_deploy_guards.py
       - name: Image imports and absent secret files
         run: |
           docker run --rm --entrypoint python repit:ci -c "import aiogram, asyncpg, app.main; from pathlib import Path; assert not Path('/app/.env').exists()"
