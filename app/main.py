@@ -110,7 +110,9 @@ async def run():
     finally:
         if task:
             task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
+            # The supervisor already propagated a maintenance error. Cleanup
+            # must still close bot, pool and lock even when that task failed.
+            with contextlib.suppress(asyncio.CancelledError, Exception):
                 await task
         if bot:
             await bot.session.close()
