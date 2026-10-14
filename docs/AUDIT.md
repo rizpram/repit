@@ -40,3 +40,8 @@ Two existing commits were found. Initial commit tree contains only README; Phase
 ## Remaining live verification
 
 No production Telegram polling, provider call or TLS connection was performed here. Unit mocks and disposable PostgreSQL are distinct from live acceptance checks. See RELEASE.md. CI result must be attached to PR; failures block release.
+
+
+## Deployment continuation
+
+SSH from this session failed before connection establishment; Docker Manager is unsupported on the VPS's installed OS. No production mutation was made. Dependency audit identified the need to update aiohttp beyond the original 3.12.15 pin; aiogram/aiohttp were updated to compatible 3.31.0/3.14.5 and pip-audit added as a release gate. The script and runtime evidence now distinguish successful transport polling, DB heartbeat and actual command replies. Real provider/Telegram/Supabase execution still requires private server access.

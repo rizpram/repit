@@ -41,3 +41,14 @@ Docker HEALTHCHECK reports status; Docker does not automatically restart a runni
 Stop only REPIT service, restore previously reviewed source/image in this directory, reuse unchanged .env and CA, rebuild/start only this service. No DB migration was applied, so schema rollback isn't required. Preserve bot_events and conversation_states. A baseline poller without dedup can replay a queued update: assess pending updates before rollback and prefer the last tested dedup-capable release. Never restore or truncate the entire Supabase schema.
 
 No system upgrades, reboot, shared service changes or destructive Docker prune commands.
+
+
+## Single-script rollout and evidence
+
+Use scripts/deploy.sh with the exact tested PR SHA in an authorized root/sudo SSH session. Server .env and Supabase CA remain in /opt/rizpram-fitness-bot, separate from immutable releases. No secret file is copied into source or Docker image. Compose paths/image are supplied through REPIT_ENV_FILE, REPIT_CA_FILE and REPIT_IMAGE.
+
+The script re-runs full tests against disposable localhost PostgreSQL using a container network namespace with no published ports. It refuses unfamiliar REPIT project ownership/config paths, multiple existing REPIT containers, symlink staging paths, or extra services/host ports. It preserves the former image/config and rolls back only REPIT on verification failure. Test containers have a unique deployment label and only those are cleaned up. Old releases/images are retained, not pruned.
+
+At the Telegram prompt, send /start and /target within three minutes. /tmp/repit-runtime.json inside the container records only successful polling/DB timestamps and whitelisted command names (no arguments, messages or secrets). VERIFIED_LIVE requires recent successful getUpdates, DB heartbeat, Docker healthy, and successful real replies to both commands. Other commands remain covered by automated tests until separately exercised live.
+
+See docs/DEPLOYMENT_STATUS.md for the current actual access/deployment status.

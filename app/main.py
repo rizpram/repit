@@ -8,6 +8,7 @@ from app.domain import reminder_due
 from app.security import HEARTBEAT, LOCK_ID, database_options, setup_logging
 from app.service import coach, process
 from app.vision import estimate
+from app.diagnostics import mark, record_request
 
 async def notify(conn,bot,row,now):
     if row['reminder_type']=='weekly_coach':
@@ -49,6 +50,8 @@ async def handle_update(bot,pool,allowed,event,failure):
     if reply:
         try:
             await message.answer(reply)
+            command = (message.text or '').split(maxsplit=1)[0].split('@')[0].lower() if message.text else None
+            mark('last_reply_success', command)
         except Exception:
             logging.error('Reply failed; committed writes will not replay')
 
@@ -73,6 +76,8 @@ async def run():
             raise RuntimeError('Another REPIT poller owns lock')
         pool=await asyncpg.create_pool(dsn,ssl=tls,min_size=1,max_size=3,command_timeout=30)
         bot,dp=Bot(token),Dispatcher()
+        bot.session.middleware(record_request)
+        mark('started_at')
 
         @dp.update.outer_middleware()
         async def durable(handler,event,data):
@@ -88,6 +93,7 @@ async def run():
                         where r.enabled and u.is_active and u.telegram_user_id=$1''',allowed)
                     for row in rows:
                         await notify(conn,bot,row,datetime.now(timezone.utc))
+                mark('last_db_success')
                 HEARTBEAT.touch()
                 await asyncio.sleep(30)
 

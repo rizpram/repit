@@ -1,10 +1,11 @@
 services:
   fitness-bot:
+    image: ${REPIT_IMAGE:-repit:local}
     build: .
     restart: unless-stopped
-    env_file: .env
+    env_file: ${REPIT_ENV_FILE:-.env}
     volumes:
-      - ./supabase-ca.crt:/run/secrets/supabase-ca.crt:ro
+      - ${REPIT_CA_FILE:-./supabase-ca.crt}:/run/secrets/supabase-ca.crt:ro
     read_only: true
     tmpfs:
       - /tmp

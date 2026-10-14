@@ -25,7 +25,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
         @dp.update.outer_middleware()
         async def durable(handler,event,data):
             return await handle_update(bot,pool,123,event,failure)
-        with patch('app.main.process',new=AsyncMock(return_value='REPIT')) as process_mock,patch.object(Bot,'__call__',new=AsyncMock()) as send:
+        with patch('app.main.process',new=AsyncMock(return_value='REPIT')) as process_mock,patch.object(Bot,'__call__',new=AsyncMock()) as send,patch('app.main.mark') as mark:
             await dp.feed_update(bot,update(uid=999))
             await dp.feed_update(bot,update(uid=123,chat_type='group'))
             pool.acquire.assert_not_called()
@@ -33,6 +33,7 @@ class RuntimeTests(unittest.IsolatedAsyncioTestCase):
             process_mock.assert_awaited_once()
             self.assertEqual(process_mock.await_args.args[1],1)
             send.assert_awaited_once()
+            mark.assert_called_once_with('last_reply_success','/start')
             self.assertFalse(failure.done())
         await bot.session.close()
 
