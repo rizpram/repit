@@ -12,10 +12,14 @@
 - 11 deployment guard/rollback simulations pass in an isolated `python:3.12-slim` container without a Docker socket (8 previous + 3 new).
 - `bash -n scripts/deploy.sh`, `compileall` and the reachable-history secret scan pass.
 
+## CI on release commit 0d712a7 (GitHub Actions)
+
+- Push run https://github.com/rizpram/repit/actions/runs/39139979401 and pull_request run 39139982770: success.
+- Steps passed: locked install, pip-audit of runtime requirements, Bash syntax, all unit + PostgreSQL integration tests, compileall, secret scan, **Docker image build**, 11 isolated guard/rollback simulations, image import / absent-secret checks, Compose validation with placeholders.
+- The Docker build was not run in the cloud session itself (intercepting egress proxy); the CI build above is the build evidence.
+
 ## Not verified here
 
-- **Docker image build**: not run in this environment (outbound TLS goes through an intercepting proxy that the image's pip does not trust). CI builds the image on every push; check CI for the new head.
-- **pip-audit**: not re-run here; last CI result is from the previous head.
 - **Supabase schema compatibility**: `db.lzfrfpokshfrbnbaiuqo.supabase.co` / the pooler and the Supabase API were not reachable from this environment. Compatibility is only established against the contract snapshot in `tests/fixtures/schema.sql` (dated 2026-10-14). `python -m app.verify` checks the live schema, privileges, RLS bypass and webhook state as a preflight before anything is replaced.
 - **SSH / VPS state**: TCP to 76.13.21.67:22 is blocked by this environment's egress policy, and no SSH key or agent is available. `api.telegram.org` is also blocked. The earlier "Permission denied" (2026-10-14) was the same kind of egress refusal, not a server-side authentication result. Nothing about the VPS (Docker version, existing containers, `/opt/rizpram-fitness-bot` contents) was observed.
 
@@ -30,10 +34,10 @@
 1. Place secrets privately (never in Git or chat):
    - `/opt/rizpram-fitness-bot/.env` from `.env.example`: bot token, your numeric Telegram user ID, session-pooler URI (port 5432) for `lzfrfpokshfrbnbaiuqo` only, `DATABASE_CA_FILE=/run/secrets/supabase-ca.crt`. `sudo chown root:root .env && sudo chmod 600 .env`.
    - `/opt/rizpram-fitness-bot/supabase-ca.crt` from Supabase Dashboard → Database settings → SSL certificate. `sudo chown root:root supabase-ca.crt && sudo chmod 644 supabase-ca.crt`.
-2. Check the CI run for the new PR head is green, then run with that exact 40-character SHA:
+2. Run with the CI-verified code commit 0d712a7e0bc4bb8d90d946660951bfa7fb26f59c (later doc-only commits are fine if their CI is green):
 
-       cd /tmp && curl -fsSLO https://raw.githubusercontent.com/rizpram/repit/<SHA>/scripts/deploy.sh
-       sudo bash deploy.sh <SHA>
+       cd /tmp && curl -fsSLO https://raw.githubusercontent.com/rizpram/repit/0d712a7e0bc4bb8d90d946660951bfa7fb26f59c/scripts/deploy.sh
+       sudo bash deploy.sh 0d712a7e0bc4bb8d90d946660951bfa7fb26f59c
 
 3. When the script prints the prompt, send `/start` and `/target` to the bot from the allowed account within 3 minutes. Only the line `VERIFIED_LIVE:` counts as live; anything ending in `DEPLOYMENT_NOT_LIVE` means REPIT was rolled back or left unchanged.
 4. Share the sanitized report path's contents (it contains no secrets) or paste the final lines into PR rizpram/repit#2.
