@@ -29,6 +29,14 @@ done
     echo ".env permissions must be 600 or 400."; exit 2
 }
 [[ "$(stat -c '%u' "$BASE/.env")" == 0 ]] || { echo ".env must belong to root."; exit 2; }
+# Public CA certificate, not a secret: container user 10001 must read it, root must own it.
+CA_MODE="$(stat -c '%a' "$BASE/supabase-ca.crt")"
+[[ "$(stat -c '%u' "$BASE/supabase-ca.crt")" == 0 ]] && (( (8#$CA_MODE & 0004) && !(8#$CA_MODE & 0022) )) || {
+    echo "supabase-ca.crt must be root-owned mode 644 or 444 (container runs as non-root)."; exit 2
+}
+grep -q -- '-----BEGIN CERTIFICATE-----' "$BASE/supabase-ca.crt" || {
+    echo "supabase-ca.crt is not a PEM certificate; download the project's CA from Supabase."; exit 2
+}
 RUN="$(date -u +%Y%m%dT%H%M%SZ)-$$"
 SOURCE="$BASE/releases/$SHA-$RUN"
 REPORT="$BASE/deployment-$RUN.log"
@@ -138,7 +146,8 @@ docker rm -f "$CI_DB" >/dev/null
 echo "Preflight: Supabase TLS/schema and Telegram identity, no update consumption."
 compose run --rm --no-deps --entrypoint python fitness-bot -m app.verify
 
-mapfile -t existing < <(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT")
+# Ignore leftover `compose run` one-off containers; only the service container is replaced.
+mapfile -t existing < <(docker ps -aq --filter "label=com.docker.compose.project=$PROJECT" --filter "label=com.docker.compose.oneoff=False")
 [[ "${#existing[@]}" -le 1 ]] || { echo "Multiple REPIT containers; manual review required."; exit 2; }
 if [[ "${#existing[@]}" == 1 ]]; then
     OLD_ID="${existing[0]}"

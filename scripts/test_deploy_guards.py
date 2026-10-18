@@ -76,7 +76,8 @@ class DeployGuardTests(unittest.TestCase):
         BASE.mkdir(parents=True,mode=0o700)
         (BASE/'.env').write_text('DUMMY_ONLY=1\n')
         (BASE/'.env').chmod(0o600)
-        (BASE/'supabase-ca.crt').write_text('test-placeholder\n')
+        (BASE/'supabase-ca.crt').write_text('-----BEGIN CERTIFICATE-----\ntest-placeholder\n-----END CERTIFICATE-----\n')
+        (BASE/'supabase-ca.crt').chmod(0o644)
         (BASE/'docker-compose.yml').write_text('services:\n  fitness-bot:\n    image: old\n')
         self.tmp=tempfile.TemporaryDirectory()
         self.root=Path(self.tmp.name)
@@ -120,6 +121,22 @@ class DeployGuardTests(unittest.TestCase):
     def test_weak_env_permissions_refuse_replacement(self):
         (BASE/'.env').chmod(0o644)
         self.assert_no_replacement(self.invoke('permissions'))
+
+    def test_unreadable_ca_refuses_before_docker_build(self):
+        (BASE/'supabase-ca.crt').chmod(0o600)
+        calls=self.invoke('ca_permissions')
+        self.assert_no_replacement(calls)
+        self.assertFalse(any(a and a[0]=='compose' and 'build' in a for a in calls))
+
+    def test_non_pem_ca_refuses_replacement(self):
+        (BASE/'supabase-ca.crt').write_text('not a certificate\n')
+        self.assert_no_replacement(self.invoke('ca_format'))
+
+    def test_existing_container_query_ignores_oneoff_runs(self):
+        calls=self.invoke('startup_fail')
+        query=[a for a in calls if a[:2]==['ps','-aq']]
+        self.assertEqual(len(query),1)
+        self.assertIn('label=com.docker.compose.oneoff=False',query[0])
 
     def test_symlink_release_parent_rejected_before_creation(self):
         outside=self.root/'outside'

@@ -4,7 +4,7 @@
 
 1. Review PR; CI unit + PostgreSQL integration + secret scan + Docker build must all pass.
 2. Keep repository private if possible. Store Telegram token, allowed user ID and DB URI only in server .env. Never paste them into PR/logs.
-3. Download authorized project's Supabase database CA to supabase-ca.crt. Set DATABASE_CA_FILE to container path /run/secrets/supabase-ca.crt.
+3. Download authorized project's Supabase database CA to supabase-ca.crt (root-owned, mode 644: it is a public certificate and the container runs as uid 10001). Set DATABASE_CA_FILE to container path /run/secrets/supabase-ca.crt. Compose interpolates `$` in unquoted .env values: if the DB password contains `$`, wrap the whole value in single quotes (literal).
 4. For photo recognition, enabling VISION_ENABLED explicitly consents to sending food photos to OpenAI and potential cost. Fill OPENAI_API_KEY privately; provider failure never saves a meal.
 5. Obtain separate authorization for live deployment and acceptance testing. This PR does not deploy, merge, reboot or change VPS settings.
 
