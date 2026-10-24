@@ -2,6 +2,14 @@
 
 **NOT DEPLOYED. NOT VERIFIED LIVE.** No REPIT container has been started on the VPS by this work, and no Telegram reply from the production bot has been observed.
 
+## Re-check 2026-10-24 (cloud execution environment)
+
+- PR #2 still open and unmerged, head da3239e (doc-only on top of release commit 0d712a7). CI runs 39140241282 and 39140127757 on da3239e: success.
+- Re-run locally on da3239e with `requirements.lock` (Python 3.13): all 33 application tests pass, including the 7 integration tests against a disposable PostgreSQL 16; `bash -n scripts/deploy.sh` and the secret-history scan pass. The 11 guard simulations correctly refuse to run outside an isolated container; their evidence remains the CI runs above.
+- Egress is unchanged: TCP 76.13.21.67:22, `api.telegram.org` and `*.supabase.co` are refused by this environment's proxy (HTTP 403 on CONNECT). No SSH key/agent and no link to the owner's computer or browser were available, so the VPS was not touched.
+- Repository is still public, so the `deploy.sh` codeload download path still works.
+- Release commit for rollout is unchanged: `0d712a7e0bc4bb8d90d946660951bfa7fb26f59c`. The owner steps below are still the only route to `VERIFIED_LIVE:`.
+
 ## Verified on 2026-10-18 (from a cloud execution environment)
 
 - PR rizpram/repit#2 is open, not merged; head before this update was 9e7066c. CI runs 38574730559 and 38574718741 on 9e7066c concluded success (GitHub API).
