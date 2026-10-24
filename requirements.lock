@@ -1,4 +1,4 @@
-# Resolved and dependency-audited on Python 3.12, 2026-10-14.
+# Resolved and dependency-audited on Python 3.12, 2026-10-14; certifi bumped 2026-10-24 (PYSEC-2026-4320).
 aiofiles==25.1.0
 aiogram==3.31.0
 aiohappyeyeballs==2.7.1
@@ -7,7 +7,7 @@ aiosignal==1.4.0
 annotated-types==0.8.0
 asyncpg==0.30.0
 attrs==26.1.0
-certifi==2026.7.22
+certifi==2026.10.19
 frozenlist==1.8.0
 idna==3.20
 magic-filter==1.0.12
