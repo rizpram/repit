@@ -90,6 +90,13 @@ class IntegrationTests(unittest.IsolatedAsyncioTestCase):
         await self.send('/confirmfood')
         await self.send('/confirmfood')
         self.assertEqual(await self.conn.fetchval('select count(*) from fitness.food_logs'),1)
+        text_meal=dict(meal,description='Nasi padang',ai_provider='OpenAI',origin='text')
+        reply=await self.send('/food nasi padang',vision=text_meal)
+        self.assertIn('Estimasi AI teks (OpenAI)',reply)
+        self.assertEqual(await self.conn.fetchval('select count(*) from fitness.food_logs'),1)
+        await self.send('/confirmfood')
+        sources=await self.conn.fetch('select source from fitness.food_logs order by id')
+        self.assertEqual([r['source'] for r in sources],['photo_estimate','text_estimate'])
 
     async def test_scheduler_and_poller_lock(self):
         await self.send('/reminder on')

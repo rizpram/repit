@@ -30,12 +30,13 @@ def database_options(dsn, ca_file):
 
 def redact(value):
     value=str(value)
-    for key in ('TELEGRAM_BOT_TOKEN','DATABASE_URL','OPENAI_API_KEY'):
+    for key in ('TELEGRAM_BOT_TOKEN','DATABASE_URL','OPENAI_API_KEY','ANTHROPIC_API_KEY','GEMINI_API_KEY'):
         secret=os.getenv(key)
         if secret:
             value=value.replace(secret,'[REDACTED]')
     value=re.sub(r'postgres(?:ql)?://[^\s"\']+','[REDACTED_DB_URI]',value)
     value=re.sub(r'\b\d{6,}:[A-Za-z0-9_-]{20,}','[REDACTED_TOKEN]',value)
+    value=re.sub(r'\bAIza[A-Za-z0-9_-]{30,}','[REDACTED_API_KEY]',value)
     return re.sub(r'\bsk-[A-Za-z0-9_-]{12,}','[REDACTED_API_KEY]',value)
 
 class SafeFormatter(logging.Formatter):

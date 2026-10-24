@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from app.domain import reminder_due
 from app.security import HEARTBEAT, LOCK_ID, database_options, setup_logging
 from app.service import coach, process
-from app.vision import estimate
+from app.vision import coach_narrative, estimate, estimate_text, wants_text_estimate
 from app.diagnostics import mark, record_request
 
 async def notify(conn,bot,row,now):
@@ -23,6 +23,7 @@ async def notify(conn,bot,row,now):
     try:
         if row['reminder_type']=='weekly_coach':
             text=await coach(conn,row['user_id'],now,'Asia/Jakarta')
+            text+=await coach_narrative(text)
         else:
             text={'morning_goal':'Target hari ini: /target','lunch':'Catat makan: /food','evening_check':'Cek progres: /today','daily_recap':'Rekap: /today'}[row['reminder_type']]
         await bot.send_message(row['telegram_chat_id'] or row['telegram_user_id'],text)
@@ -39,18 +40,28 @@ async def handle_update(bot,pool,allowed,event,failure):
         async with pool.acquire() as conn:
             if await conn.fetchval('select 1 from fitness.bot_events where telegram_update_id=$1',event.update_id):
                 return
-            vision=await estimate(bot,message.photo[-1]) if message.photo else None
-            reply=await process(conn,event.update_id,allowed,message.chat.id,(message.text or '').strip(),datetime.now(timezone.utc),vision)
+            # Provider calls happen before the DB transaction; drafts need /confirmfood.
+            text=(message.text or '').strip()
+            if message.photo:
+                vision=await estimate(bot,message.photo[-1])
+            elif wants_text_estimate(text):
+                vision=await estimate_text(text)
+            else:
+                vision=None
+            reply=await process(conn,event.update_id,allowed,message.chat.id,text,datetime.now(timezone.utc),vision)
     except Exception:
         # aiogram catches ordinary handler errors. Cancel this polling task
         # and signal supervisor so no next batch acknowledges failed writes.
         if not failure.done():
             failure.set_result(True)
         raise asyncio.CancelledError()
+    command = (message.text or '').split(maxsplit=1)[0].split('@')[0].lower() if message.text else None
+    if reply and command=='/coach' and reply.startswith('REPIT Weekly Review'):
+        # After commit: the stored report stays deterministic.
+        reply+=await coach_narrative(reply)
     if reply:
         try:
             await message.answer(reply)
-            command = (message.text or '').split(maxsplit=1)[0].split('@')[0].lower() if message.text else None
             mark('last_reply_success', command)
         except Exception:
             logging.error('Reply failed; committed writes will not replay')

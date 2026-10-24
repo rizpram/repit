@@ -4,7 +4,17 @@ Private Telegram fitness logger. Release requires review and passing CI. **No li
 
 Implemented: persistent /profile onboarding (including skip/manual targets), /goal cutting|bulking|maintenance, /goal manual 2000 140, /confirmgoal, /target, /weight, /food, /workout Hevy strength imports, /today, /coach, /reminder on|off, /timezone, /cancel, optional photo estimation and /confirmfood.
 
-The coach is a **deterministic statistical report, not AI analysis**. Vision is AI-backed only when configured and enabled. Vision estimates are drafts until /confirmfood. /cancel discards drafts; to correct an estimate, cancel and enter /food with correct values. No TKPI/USDA matching or provider-backed narrative coach is claimed.
+The weekly coach is a **deterministic statistical report**; when `AI_COACH_ENABLED=true` a clearly labelled AI narrative is appended (only weekly aggregates are sent) and the stored report stays deterministic. Photo and free-text meal estimates (`/food nasi padang rendang`) are AI-backed only when configured and enabled, and remain drafts until /confirmfood. /cancel discards drafts; to correct an estimate, cancel and enter /food with correct values. No TKPI/USDA matching is claimed.
+
+### AI providers per feature
+
+| Feature | Primary | Fallbacks | Why |
+|---|---|---|---|
+| Food photo estimate | Gemini (`gemini-3.8-flash`) | OpenAI → Claude | Strong, low-cost image understanding |
+| Free-text meal estimate | OpenAI (`gpt-6-luna`) | Gemini → Claude | Fast, cheap, reliable JSON |
+| Weekly coach narrative | Claude (`claude-sonnet-5-5`) | Gemini → OpenAI | Most careful Indonesian reasoning and tone |
+
+A provider without a key is skipped; on error or timeout the next one is tried. Routes and models can be overridden with `AI_ROUTE_<FEATURE>` and `AI_MODEL_<PROVIDER>[_<FEATURE>]` (see `.env.example`). Each reply names the provider that answered.
 
 ## Authorized database
 

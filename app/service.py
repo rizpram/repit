@@ -6,9 +6,9 @@ from zoneinfo import ZoneInfo
 from app.domain import STEPS, number, parse_field, parse_meal, parse_workout, week_bounds
 from app.goals import calculate_goal
 
-HELP=('REPIT — rekap deterministik, bukan AI Coach\n/profile — setup\n'
+HELP=('REPIT — rekap deterministik; analisis AI hanya jika diaktifkan\n/profile — setup\n'
       '/goal cutting|bulking|maintenance\n/goal manual 2000 140\n/confirmgoal\n/target\n'
-      '/weight 77.5\n/food 550 35 60 18 Nasi ayam\n/confirmfood — simpan estimasi foto\n'
+      '/weight 77.5\n/food 550 35 60 18 Nasi ayam\n/food nasi padang rendang — estimasi AI (opsional)\n/confirmfood — simpan estimasi AI\n'
       '/workout — paste Hevy setelah perintah\n/coach\n/today\n'
       '/reminder on|off — opt-in\n/timezone Asia/Jakarta\n/cancel')
 
@@ -130,7 +130,8 @@ async def command(conn,uid,raw,now,timezone):
     if cmd=='/confirmfood':
         if state.get('kind')!='meal':
             return 'Belum ada estimasi foto untuk dikonfirmasi.'
-        await store_meal(conn,uid,state['meal'],'photo_estimate')
+        source='text_estimate' if state['meal'].get('origin')=='text' else 'photo_estimate'
+        await store_meal(conn,uid,state['meal'],source)
         await save_state(conn,uid,{})
         return 'Estimasi makanan dikonfirmasi dan dicatat.'
     if cmd=='/workout':
@@ -196,7 +197,9 @@ async def process(conn,update_id,telegram_id,chat_id,raw,now,vision=None):
                             reply='Selesaikan input aktif atau /cancel sebelum foto.'
                         else:
                             await save_state(conn,uid,dict(kind='meal',meal=vision))
-                            reply=(f"Estimasi AI foto: {vision['description']}\n{vision['calories']} kcal; protein {vision['protein_g']} g, carbs {vision['carbs_g']} g, fat {vision['fat_g']} g.\n"
+                            kind='teks' if vision.get('origin')=='text' else 'foto'
+                            label=f" ({vision['ai_provider']})" if vision.get('ai_provider') else ''
+                            reply=(f"Estimasi AI {kind}{label}: {vision['description']}\n{vision['calories']} kcal; protein {vision['protein_g']} g, carbs {vision['carbs_g']} g, fat {vision['fat_g']} g.\n"
                                    'Belum dicatat. /confirmfood untuk simpan; /cancel untuk batal.\nKoreksi: /cancel lalu /food manual.')
                 else:
                     reply=await command(conn,uid,raw,now,timezone)
