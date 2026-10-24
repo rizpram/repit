@@ -18,6 +18,13 @@
 - No AI provider was called live: provider hosts are unreachable from this environment. Covered by mocked tests only until exercised on the VPS.
 - **New release commit for rollout: `1c32e562fbd3f23019f2155a56346c550375cd49`.** It replaces 0d712a7 in the steps below.
 
+## Update 2026-10-24 (later) — Gemini as primary provider
+
+- a8df90f makes Gemini primary for every AI feature, so a `GEMINI_API_KEY` alone is enough (free tier; Google may use free-tier inputs to improve its products). Defaults: `gemini-3.8-flash` for photos and coach, `gemini-3.5-flash-lite` for typed meals. OpenAI and Claude remain optional paid fallbacks. Retries 429/500/503 once. Adds `python -m app.ai_check` for a live provider check.
+- CI on a8df90f: runs 40079338042 and 40079334772 success. Locally: 47 app tests pass with a disposable PostgreSQL 16.
+- Gemini has still not been called live from this environment.
+- **Release commit for rollout is now `a8df90f94d35c287dacc0a9123e2b132823fd7db`** (replaces 1c32e56 in the steps below). After `VERIFIED_LIVE:`, run `sudo docker compose -p rizpram-fitness-bot exec fitness-bot python -m app.ai_check` to verify Gemini.
+
 ## Verified on 2026-10-18 (from a cloud execution environment)
 
 - PR rizpram/repit#2 is open, not merged; head before this update was 9e7066c. CI runs 38574730559 and 38574718741 on 9e7066c concluded success (GitHub API).
@@ -48,12 +55,12 @@
 ## How to finish the rollout (owner, in a private SSH session on the VPS)
 
 1. Place secrets privately (never in Git or chat):
-   - `/opt/rizpram-fitness-bot/.env` from `.env.example`: bot token, your numeric Telegram user ID, session-pooler URI (port 5432) for `lzfrfpokshfrbnbaiuqo` only, `DATABASE_CA_FILE=/run/secrets/supabase-ca.crt`. Optional AI: `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, `GEMINI_API_KEY` and the per-feature `AI_*_ENABLED` flags (see `.env.example`). `sudo chown root:root .env && sudo chmod 600 .env`.
+   - `/opt/rizpram-fitness-bot/.env` from `.env.example`: bot token, your numeric Telegram user ID, session-pooler URI (port 5432) for `lzfrfpokshfrbnbaiuqo` only, `DATABASE_CA_FILE=/run/secrets/supabase-ca.crt`. Optional AI: `GEMINI_API_KEY` (enough on its own), optionally `OPENAI_API_KEY`/`ANTHROPIC_API_KEY`, and the per-feature `AI_*_ENABLED` flags (see `.env.example`). `sudo chown root:root .env && sudo chmod 600 .env`.
    - `/opt/rizpram-fitness-bot/supabase-ca.crt` from Supabase Dashboard → Database settings → SSL certificate. `sudo chown root:root supabase-ca.crt && sudo chmod 644 supabase-ca.crt`.
-2. Run with the CI-verified code commit 1c32e562fbd3f23019f2155a56346c550375cd49 (later doc-only commits are fine if their CI is green):
+2. Run with the CI-verified code commit a8df90f94d35c287dacc0a9123e2b132823fd7db (later doc-only commits are fine if their CI is green):
 
-       cd /tmp && curl -fsSLO https://raw.githubusercontent.com/rizpram/repit/1c32e562fbd3f23019f2155a56346c550375cd49/scripts/deploy.sh
-       sudo bash deploy.sh 1c32e562fbd3f23019f2155a56346c550375cd49
+       cd /tmp && curl -fsSLO https://raw.githubusercontent.com/rizpram/repit/a8df90f94d35c287dacc0a9123e2b132823fd7db/scripts/deploy.sh
+       sudo bash deploy.sh a8df90f94d35c287dacc0a9123e2b132823fd7db
 
 3. When the script prints the prompt, send `/start` and `/target` to the bot from the allowed account within 3 minutes. Only the line `VERIFIED_LIVE:` counts as live; anything ending in `DEPLOYMENT_NOT_LIVE` means REPIT was rolled back or left unchanged.
 4. Share the sanitized report path's contents (it contains no secrets) or paste the final lines into PR rizpram/repit#2.
