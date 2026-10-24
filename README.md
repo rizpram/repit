@@ -8,13 +8,19 @@ The weekly coach is a **deterministic statistical report**; when `AI_COACH_ENABL
 
 ### AI providers per feature
 
-| Feature | Primary | Fallbacks | Why |
-|---|---|---|---|
-| Food photo estimate | Gemini (`gemini-3.8-flash`) | OpenAI → Claude | Strong, low-cost image understanding |
-| Free-text meal estimate | OpenAI (`gpt-6-luna`) | Gemini → Claude | Fast, cheap, reliable JSON |
-| Weekly coach narrative | Claude (`claude-sonnet-5-5`) | Gemini → OpenAI | Most careful Indonesian reasoning and tone |
+Gemini is primary everywhere because its API has a free tier; a `GEMINI_API_KEY` alone runs all three features. OpenAI and Claude are optional paid fallbacks.
 
-A provider without a key is skipped; on error or timeout the next one is tried. Routes and models can be overridden with `AI_ROUTE_<FEATURE>` and `AI_MODEL_<PROVIDER>[_<FEATURE>]` (see `.env.example`). Each reply names the provider that answered.
+| Feature | Primary (default model) | Optional fallbacks |
+|---|---|---|
+| Food photo estimate | Gemini `gemini-3.8-flash` | OpenAI → Claude |
+| Free-text meal estimate | Gemini `gemini-3.5-flash-lite` | OpenAI → Claude |
+| Weekly coach narrative | Gemini `gemini-3.8-flash` | Claude → OpenAI |
+
+A provider without a key is skipped. Rate limits (429) and transient 500/503 errors are retried once after 2 s, then the next provider is tried. Blocked or truncated Gemini answers count as failures. Routes and models can be overridden with `AI_ROUTE_<FEATURE>` and `AI_MODEL_<PROVIDER>[_<FEATURE>]` (see `.env.example`). Each reply names the provider that answered. On the Gemini free tier, Google may use inputs to improve its products.
+
+Check providers live inside the running container (prints only OK/failure per feature and provider, never keys or output):
+
+    sudo docker compose -p rizpram-fitness-bot exec fitness-bot python -m app.ai_check
 
 ## Authorized database
 

@@ -1,7 +1,8 @@
 """Multi-provider AI routing: OpenAI, Anthropic Claude and Google Gemini.
 
-Each AI feature has an ordered provider chain chosen for what that provider
-does best; the next provider is tried only when one is unconfigured or fails.
+Gemini is the primary provider for every feature (it has a free tier); OpenAI
+and Claude are optional fallbacks, tried only when configured and the previous
+provider fails. A Gemini key alone runs every feature.
 Every feature is opt-in. Provider responses, photos and meal text are never
 logged: only the feature, provider name and failure class.
 """
@@ -13,12 +14,16 @@ PROVIDERS=('openai','anthropic','gemini')
 KEY_ENV={'openai':'OPENAI_API_KEY','anthropic':'ANTHROPIC_API_KEY','gemini':'GEMINI_API_KEY'}
 LABEL={'openai':'OpenAI','anthropic':'Claude','gemini':'Gemini'}
 DEFAULT_MODEL={'openai':'gpt-6-luna','anthropic':'claude-sonnet-5-5','gemini':'gemini-3.8-flash'}
-# vision: Gemini Flash is strong and cheap on food photos.
-# food_text: OpenAI small model gives fast, reliable structured JSON.
-# coach: Claude writes the most careful Indonesian narrative from aggregates.
+# Feature-specific defaults: Flash-Lite is fast enough for parsing a typed meal.
+FEATURE_MODEL={('gemini','food_text'):'gemini-3.5-flash-lite'}
+# Gemini first everywhere. Fallbacks follow each provider's strength:
+# OpenAI for structured meal JSON, Claude for the Indonesian coach narrative.
 DEFAULT_ROUTE={'vision':('gemini','openai','anthropic'),
-               'food_text':('openai','gemini','anthropic'),
-               'coach':('anthropic','gemini','openai')}
+               'food_text':('gemini','openai','anthropic'),
+               'coach':('gemini','anthropic','openai')}
+# Free-tier rate limits (429) and overload (503) are usually brief.
+RETRY_STATUS=(429,500,503)
+RETRY_DELAY=2
 ENABLE_ENV={'vision':'AI_VISION_ENABLED','food_text':'AI_FOOD_TEXT_ENABLED','coach':'AI_COACH_ENABLED'}
 URLS={'openai':'https://api.openai.com/v1/chat/completions',
       'anthropic':'https://api.anthropic.com/v1/messages',
@@ -39,7 +44,8 @@ def enabled(feature):
 def model(provider,feature):
     legacy=os.getenv('VISION_MODEL') if provider=='openai' and feature=='vision' else None
     return (os.getenv(f'AI_MODEL_{provider.upper()}_{feature.upper()}') or legacy
-            or os.getenv(f'AI_MODEL_{provider.upper()}') or DEFAULT_MODEL[provider])
+            or os.getenv(f'AI_MODEL_{provider.upper()}') or FEATURE_MODEL.get((provider,feature))
+            or DEFAULT_MODEL[provider])
 
 def route(feature):
     """Configured providers for a feature, in order. Unknown names are ignored."""
@@ -81,21 +87,29 @@ def build(provider,name,system,text,image,want_json,max_tokens):
             'model':name,'max_tokens':max_tokens,'system':system,'messages':[{'role':'user','content':content}]}
     parts=[]
     if image:
-        parts.append({'inlineData':{'mimeType':'image/jpeg','data':image}})
+        parts.append({'inline_data':{'mime_type':'image/jpeg','data':image}})
     parts.append({'text':text})
-    config={'maxOutputTokens':max_tokens}
+    config={'max_output_tokens':max_tokens}
     if want_json:
-        config['responseMimeType']='application/json'
+        config['response_mime_type']='application/json'
+    # Header auth keeps the key out of URLs and any proxy/access logs.
     return URLS['gemini'].format(model=name),{'x-goog-api-key':key},{
-        'systemInstruction':{'parts':[{'text':system}]},
-        'contents':[{'role':'user','parts':parts}],'generationConfig':config}
+        'system_instruction':{'parts':[{'text':system}]},
+        'contents':[{'role':'user','parts':parts}],'generation_config':config}
 
 def read(provider,value):
     if provider=='openai':
         return value['choices'][0]['message']['content'] or ''
     if provider=='anthropic':
         return ''.join(block.get('text','') for block in value['content'] if block.get('type')=='text')
-    return ''.join(part.get('text','') for part in value['candidates'][0]['content']['parts'] if not part.get('thought'))
+    candidates=value.get('candidates') or []
+    if not candidates:
+        raise ProviderError('blocked: '+str((value.get('promptFeedback') or {}).get('blockReason','no candidates')))
+    candidate=candidates[0]
+    parts=(candidate.get('content') or {}).get('parts') or []
+    if not parts:
+        raise ProviderError('no output: '+str(candidate.get('finishReason','unknown')))
+    return ''.join(part.get('text','') for part in parts if not part.get('thought'))
 
 async def ask(feature,system,text,image=None,want_json=False):
     """Try the feature's provider chain. Returns (provider, text|dict) or None."""
@@ -103,18 +117,26 @@ async def ask(feature,system,text,image=None,want_json=False):
     chain=route(feature)
     if not chain:
         return None
+    import asyncio
     async with ClientSession(timeout=ClientTimeout(total=TIMEOUT)) as session:
         for provider in chain:
-            try:
-                url,headers,body=build(provider,model(provider,feature),system,text,image,want_json,MAX_TOKENS[feature])
-                async with session.post(url,headers=headers,json=body,allow_redirects=False) as response:
-                    if response.status!=200:
-                        raise ProviderError(f'HTTP {response.status}')
-                    output=read(provider,await response.json()).strip()
-                if not output:
-                    raise ProviderError('empty')
-                return provider,(extract_json(output) if want_json else output)
-            except Exception as error:
-                reason=str(error) if isinstance(error,ProviderError) else type(error).__name__
-                logging.warning('AI %s via %s failed (%s); trying next provider',feature,provider,reason)
+            url,headers,body=build(provider,model(provider,feature),system,text,image,want_json,MAX_TOKENS[feature])
+            for attempt in (1,2):
+                try:
+                    async with session.post(url,headers=headers,json=body,allow_redirects=False) as response:
+                        if response.status!=200:
+                            raise ProviderError(f'HTTP {response.status}',response.status)
+                        output=read(provider,await response.json()).strip()
+                    if not output:
+                        raise ProviderError('empty')
+                    return provider,(extract_json(output) if want_json else output)
+                except Exception as error:
+                    status=error.args[1] if isinstance(error,ProviderError) and len(error.args)>1 else None
+                    reason=error.args[0] if isinstance(error,ProviderError) else type(error).__name__
+                    if attempt==1 and status in RETRY_STATUS:
+                        logging.warning('AI %s via %s failed (%s); retrying once',feature,provider,reason)
+                        await asyncio.sleep(RETRY_DELAY)
+                        continue
+                    logging.warning('AI %s via %s failed (%s); trying next provider',feature,provider,reason)
+                    break
     return None
