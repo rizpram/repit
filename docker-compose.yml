@@ -1,8 +1,11 @@
 services:
   fitness-bot:
+    image: ${REPIT_IMAGE:-repit:local}
     build: .
     restart: unless-stopped
-    env_file: .env
+    env_file: ${REPIT_ENV_FILE:-.env}
+    volumes:
+      - ${REPIT_CA_FILE:-./supabase-ca.crt}:/run/secrets/supabase-ca.crt:ro
     read_only: true
     tmpfs:
       - /tmp
@@ -13,7 +16,13 @@ services:
     mem_limit: 256m
     pids_limit: 100
     healthcheck:
-      test: ["CMD", "python", "-c", "import os; assert os.path.exists('/proc/1/status')"]
-      interval: 60s
+      test: ["CMD", "python", "-c", "from app.security import healthy; raise SystemExit(0 if healthy() else 1)"]
+      interval: 30s
       timeout: 5s
+      start_period: 60s
       retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "3"
